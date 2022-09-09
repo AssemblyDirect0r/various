@@ -21,14 +21,21 @@ GREEN = (0, 255, 0)
 RED_SQUARES_SIZE = WidthHeight(80, 80)
 TEXT_MARGIN = 30
 TEXT_Y_MARGIN = 50
-PAGE_SHA_TEXT_SIZE = 30
-TEXT_SIZE = 80
-SYNC_MARK_COORD = 219, 1015,
-TARGET_FILE = "Capture.PNG"
+PAGE_TEXT_SIZE = 60
+SHA_TEXT_SIZE = 45
+TEXT_SIZE = 45
+SYNC_MARK_COORD = 219, 45,
+TARGET_FILE = "toto.rar"
 FONT = "monofont.otf"
 IMG_FILE_PATH = f"tmp_files/hex_s/{TARGET_FILE}_size_{TEXT_SIZE}_imgs"
 VIDEO_TEXT_FILE_PATH = f"tmp_files/hex_s/{TARGET_FILE}_size_{TEXT_SIZE}_text_data"
 VIDEO_FILE_PATH = f"tmp_files/hex_s/{TARGET_FILE}_size_{TEXT_SIZE}_video"
+CHAR_HEIGHT = 20
+
+def convert_to_special(s):
+    return s.upper().replace("A", "A").replace("B", "?").replace("C", "x") \
+        .replace("D", "d").replace("E", "p").replace("F", "f").replace("0", "q") \
+        .replace("3", "m").replace("5", "K").replace("8", "S")
 
 def draw_rectangle(img_drawer, left_x, left_y, width, height, color, linewidth=10):
     shape = [(left_x, left_y), (left_x+width, left_y+height)]
@@ -43,11 +50,17 @@ def draw_corner_rectangles(img_drawer, r_width, r_height):
 
 def draw_page_num(img_drawer, num):
     num = "Page " + str(num)
-    font = ImageFont.truetype(FONT, PAGE_SHA_TEXT_SIZE)
+    font = ImageFont.truetype(FONT, PAGE_TEXT_SIZE)
     f_width, f_height = font.getsize(num)
     left_x = int(IMAGE_RESOLUTION.width/2.0 - f_width/2.0)
-    left_y = int(RED_SQUARES_SIZE.height / 2.0 - f_height / 2.0)
+    left_y = int(110 / 2.0 - f_height / 2.0)
     img_drawer.text((left_x, left_y), num, font=font, fill=WHITE)
+
+def get_char_height():
+    max_line_size = IMAGE_RESOLUTION.width - TEXT_MARGIN * 2
+    font = ImageFont.truetype(FONT, TEXT_SIZE)
+    l_width, l_height = font.getsize('B')
+    return l_height
 
 def compute_number_of_char_per_line():
     max_line_size = IMAGE_RESOLUTION.width - TEXT_MARGIN * 2
@@ -60,13 +73,30 @@ def compute_number_of_char_per_line():
             return len(line) - 1
 
 def print_sha_on_page(img_drawer, text_bloc):
-    hash = str(hashlib.sha256(text_bloc.encode('utf-8')).hexdigest()).upper()
-    font = ImageFont.truetype(FONT, PAGE_SHA_TEXT_SIZE)
-    f_width, f_height = font.getsize(hash)
+    hash = str(hashlib.sha256(text_bloc.replace(" ", "").encode('utf-8')).hexdigest())
+    hash = str(hash).upper()
+    font = ImageFont.truetype(FONT, SHA_TEXT_SIZE)
+    
+    text_a = hash[32:]
+    text_a = convert_to_special(text_a)
+    text_a_final = ''
+    for char in text_a:
+        text_a_final += char + " "
+    f_width, f_height = font.getsize(text_a_final)
     left_x = int(IMAGE_RESOLUTION.width/2.0 - f_width/2.0)
-    left_y = int((RED_SQUARES_SIZE.height / 2.0 ) + (IMAGE_RESOLUTION.height-RED_SQUARES_SIZE.height) - f_height / 2.0)
-    img_drawer.text((left_x, left_y), hash, font=font, fill=WHITE)
-    return hash
+    left_y = int((IMAGE_RESOLUTION.height-70-53))
+    img_drawer.text((left_x, left_y), text_a_final, font=font, fill=WHITE)
+
+    text_b = hash[:32]
+    text_b = convert_to_special(text_b)
+    text_b_final = ''
+    for char in text_b:
+        text_b_final += char + " "
+    left_x = int(IMAGE_RESOLUTION.width/2.0 - f_width/2.0)
+    left_y = int((IMAGE_RESOLUTION.height-70))
+    img_drawer.text((left_x, left_y), text_b_final, font=font, fill=WHITE)
+
+    return hash, text_a_final, text_b_final
 
 def add_sync_mark(im_drawer):
     x, y = SYNC_MARK_COORD
@@ -76,9 +106,10 @@ def add_sync_mark(im_drawer):
 def remove_sync_mark(im_drawer):
     x, y = SYNC_MARK_COORD
     r = 21
-    im_drawer.ellipse((x-r, y-r, x+r, y+r), fill=WHITE, outline=WHITE)
+    im_drawer.ellipse((x-r, y-r, x+r, y+r), fill=BLACK, outline=BLACK)
 
 def draw_text_on_image(img_drawer, n_char_per_line, text, page_num):
+    char_height = get_char_height()
     font = ImageFont.truetype(FONT, TEXT_SIZE)
     current_line = ''
     current_line_number = 0
@@ -89,35 +120,41 @@ def draw_text_on_image(img_drawer, n_char_per_line, text, page_num):
     text_bloc_data = []
     for char in text:
         number_of_char_printed += 1
-        current_line += char
+        current_line += char + " "
         if len(current_line) == n_char_per_line:
-            f_width, f_height = font.getsize(current_line)
             text_bloc += current_line
-            img_drawer.text((TEXT_MARGIN, current_y_offset), current_line, font=font, fill=WHITE)
+            img_drawer.text((TEXT_MARGIN, current_y_offset), convert_to_special(current_line), font=font, fill=WHITE)
             text_bloc_data.append(current_line)
             current_line = ''
             current_line_number += 1
-            current_y_offset += f_height + 5
-            if current_y_offset + f_height + 5 > y_to_stop:
-                hash = print_sha_on_page(img_drawer, text_bloc)
+            current_y_offset += char_height + 10
+            if current_y_offset + char_height + 10 > y_to_stop:
+                hash, a, b = print_sha_on_page(img_drawer, text_bloc)
                 
                 with open(rf"{VIDEO_TEXT_FILE_PATH}\{TARGET_FILE}_page_{page_num}.txt", "w") as f:
                     for line in text_bloc_data:
                         f.write(line+'\n')
                     f.write('\n')
-                    f.write(hash+'\n')
+                    f.write(hash.lower()+'\n')
+                    f.write('\n')
+                    f.write(a+'\n')
+                    f.write(b+'\n')
                 
                 return text[number_of_char_printed:]
 
     text_bloc += current_line
     text_bloc_data.append(current_line)
-    img_drawer.text((TEXT_MARGIN, current_y_offset), current_line, font=font, fill=WHITE)
-    hash = print_sha_on_page(img_drawer, text_bloc)
+    img_drawer.text((TEXT_MARGIN, current_y_offset), convert_to_special(current_line), font=font, fill=WHITE)
+    hash, a, b = print_sha_on_page(img_drawer, text_bloc)
     with open(rf"{VIDEO_TEXT_FILE_PATH}\{TARGET_FILE}_page_{page_num}.txt", "w") as f:
         for line in text_bloc_data:
             f.write(line+'\n')
         f.write('\n')
         f.write(hash+'\n')
+        f.write(hash.lower()+'\n')
+        f.write('\n')
+        f.write(a+'\n')
+        f.write(b+'\n')
     return None
 
 def make_video():
@@ -168,6 +205,7 @@ while True:
     current_page_num += 1
     img.save(f'{IMG_FILE_PATH}/{TARGET_FILE}_{TEXT_SIZE}_{str(current_page_num).zfill(7)}.png')
     current_page_num += 1
+    remove_sync_mark(img_drawer)
     img.save(f'{IMG_FILE_PATH}/{TARGET_FILE}_{TEXT_SIZE}_{str(current_page_num).zfill(7)}.png')
     current_page_num += 1
 
